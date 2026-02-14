@@ -54,7 +54,7 @@ def _period_bounds(period):
 
 def _class_counts(df, class_col, id_col):
     if df is None or df.empty or class_col is None:
-        return {"car": 0, "bike": 0, "bus": 0, "truck": 0}, 0
+        return {"car": 0, "bike": 0, "bus": 0, "truck": 0, "auto": 0}, 0
     work = df.copy()
     work[class_col] = work[class_col].astype(str).str.lower().str.strip()
     if id_col and id_col in work.columns:
@@ -73,6 +73,7 @@ def _class_counts(df, class_col, id_col):
         "bike": _count(["bike", "bicycle", "motorbike", "motorcycle"]),
         "bus": _count(["bus"]),
         "truck": _count(["truck", "lorry"]),
+        "auto": _count(["auto", "auto-rickshaw", "autorickshaw", "rickshaw", "three wheeler", "three-wheeler", "tuk tuk"]),
     }, total
 
 
@@ -338,10 +339,11 @@ def show():
         ("Bikes", "🏍️", "#ffedd5", "#f97316", curr_counts["bike"], prev_counts["bike"]),
         ("Buses", "🚌", "#e0e7ff", "#6366f1", curr_counts["bus"], prev_counts["bus"]),
         ("Trucks", "🚚", "#fee2e2", "#ef4444", curr_counts["truck"], prev_counts["truck"]),
+        ("Autos", "🛺", "#fdf2f8", "#db2777", curr_counts["auto"], prev_counts["auto"]),
     ]
 
-    c1, c2, c3, c4 = st.columns(4)
-    for col, (label, icon, bg, color, curr, prev) in zip([c1, c2, c3, c4], kpi_defs):
+    c1, c2, c3, c4, c5 = st.columns(5)
+    for col, (label, icon, bg, color, curr, prev) in zip([c1, c2, c3, c4, c5], kpi_defs):
         change = _percent_change(curr, prev)
         badge_cls = "badge-up" if change >= 0 else "badge-down"
         share = 0.0 if curr_total == 0 else (curr / curr_total) * 100

@@ -34,6 +34,7 @@ def _draw_overlays(frame, detections, settings, queue_zone_y, events):
             "bike": (250, 204, 21),
             "bus": (16, 185, 129),
             "truck": (249, 115, 22),
+            "auto": (244, 114, 182),
         }
         for idx, det in enumerate(detections, start=1):
             x, y, w, h = det["bbox"]
@@ -136,6 +137,7 @@ def process_frame(frame, settings=None, frame_number=0, camera_id="CAM-01", draw
         "bikes": int(counts.get("bikes", 0)),
         "buses": int(counts.get("buses", 0)),
         "trucks": int(counts.get("trucks", 0)),
+        "autos": int(counts.get("autos", 0)),
     }
 
     return processed_frame, vehicle_counts, events
@@ -198,6 +200,7 @@ def _build_final_metrics(df: pd.DataFrame):
             "bikes": 0,
             "buses": 0,
             "trucks": 0,
+            "autos": 0,
             "average_queue_length": 0.0,
             "peak_queue_length": 0,
             "total_violations": 0,
@@ -216,6 +219,7 @@ def _build_final_metrics(df: pd.DataFrame):
     bikes = int(frame_df["bikes"].sum()) if "bikes" in frame_df.columns else 0
     buses = int(frame_df["buses"].sum()) if "buses" in frame_df.columns else 0
     trucks = int(frame_df["trucks"].sum()) if "trucks" in frame_df.columns else 0
+    autos = int(frame_df["autos"].sum()) if "autos" in frame_df.columns else 0
 
     average_queue_length = float(frame_df["queue_count"].mean()) if "queue_count" in frame_df.columns else 0.0
     peak_queue_length = int(frame_df["queue_count"].max()) if "queue_count" in frame_df.columns else 0
@@ -243,6 +247,7 @@ def _build_final_metrics(df: pd.DataFrame):
         "bikes": bikes,
         "buses": buses,
         "trucks": trucks,
+        "autos": autos,
         "average_queue_length": average_queue_length,
         "peak_queue_length": peak_queue_length,
         "total_violations": total_violations,
@@ -507,6 +512,7 @@ def process_full_video(video_path, frame_stride=3, resize_width=960):
                         "bikes": int(counts.get("bikes", 0)),
                         "buses": int(counts.get("buses", 0)),
                         "trucks": int(counts.get("trucks", 0)),
+                        "autos": int(counts.get("autos", 0)),
                         "total_vehicles": total_vehicles,
                         "queue_count": queue_length,
                         "queue_density": queue_density,
@@ -532,6 +538,7 @@ def process_full_video(video_path, frame_stride=3, resize_width=960):
                     "bikes": int(counts.get("bikes", 0)),
                     "buses": int(counts.get("buses", 0)),
                     "trucks": int(counts.get("trucks", 0)),
+                    "autos": int(counts.get("autos", 0)),
                     "total_vehicles": total_vehicles,
                     "queue_count": queue_length,
                     "queue_density": queue_density,
@@ -580,6 +587,7 @@ def process_full_video(video_path, frame_stride=3, resize_width=960):
         "bikes",
         "buses",
         "trucks",
+        "autos",
         "total_vehicles",
         "queue_count",
         "queue_density",

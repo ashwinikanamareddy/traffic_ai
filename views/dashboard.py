@@ -1,4 +1,5 @@
-﻿from datetime import datetime
+from datetime import datetime
+import html
 import os
 
 import pandas as pd
@@ -18,6 +19,7 @@ def _init_state():
             "queue_count": 0,
             "red_light_violations": 0,
             "rash_driving": 0,
+            "autos": 0,
         }
     if "dash_search" not in st.session_state:
         st.session_state.dash_search = ""
@@ -110,7 +112,10 @@ def _traffic_peak_percent(df: pd.DataFrame):
     ts = pd.to_datetime(df["timestamp"], errors="coerce")
     if ts.isna().all() or "total_vehicles" not in df.columns:
         return 0.0
-    frame_df = df.drop_duplicates(subset=["frame"])
+    if "frame" in df.columns:
+        frame_df = df.drop_duplicates(subset=["frame"])
+    else:
+        frame_df = df.copy()
     frame_df = frame_df.assign(hour=ts.loc[frame_df.index].dt.hour)
     totals = frame_df.groupby("hour")["total_vehicles"].sum()
     total_sum = float(totals.sum()) if not totals.empty else 0.0
@@ -150,12 +155,53 @@ def _metric_trend(df: pd.DataFrame, column: str):
     return f"+{delta}", "badge-up"
 
 
+def _active_camera_trend(df: pd.DataFrame):
+    if df is None or df.empty or "camera_id" not in df.columns or "frame" not in df.columns:
+        return "0", "badge-up"
+
+    frames = pd.to_numeric(df["frame"], errors="coerce").dropna().unique().tolist()
+    if len(frames) < 2:
+        return "0", "badge-up"
+
+    frames.sort()
+    prev_frame, curr_frame = frames[-2], frames[-1]
+    prev = int(
+        df.loc[df["frame"] == prev_frame, "camera_id"]
+        .astype(str)
+        .str.strip()
+        .replace("", pd.NA)
+        .dropna()
+        .nunique()
+    )
+    curr = int(
+        df.loc[df["frame"] == curr_frame, "camera_id"]
+        .astype(str)
+        .str.strip()
+        .replace("", pd.NA)
+        .dropna()
+        .nunique()
+    )
+    delta = curr - prev
+    if delta < 0:
+        return f"{delta}", "badge-down"
+    return f"+{delta}", "badge-up"
+
+
 def _active_cameras(df: pd.DataFrame):
     if df is None or "camera_id" not in df.columns:
         return 0
     series = df["camera_id"].dropna().astype(str).str.strip()
     series = series[series != ""]
     return int(series.nunique()) if not series.empty else 0
+
+
+def _queue_density_avg(df: pd.DataFrame):
+    if df is None or df.empty or "queue_density" not in df.columns:
+        return 0.0
+    vals = pd.to_numeric(df["queue_density"], errors="coerce").dropna()
+    if vals.empty:
+        return 0.0
+    return float(vals.mean())
 
 
 def _build_camera_rows(df: pd.DataFrame, queue_threshold=10):
@@ -273,6 +319,8 @@ def _build_recent_violations(df: pd.DataFrame):
 def show():
     _init_state()
 
+    # Sidebar navigation and branding are owned by app.py.
+
     processed = bool(st.session_state.get("processed", False))
     metrics = st.session_state.get("metrics", {}) or {}
     df = _safe_df()
@@ -289,10 +337,12 @@ def show():
         except Exception:
             pass
 
-    trend_active, cls_active = _metric_trend(df, "queue_count")
+    trend_active, cls_active = _active_camera_trend(df)
     trend_vehicles, cls_vehicles = _metric_trend(df, "total_vehicles")
     trend_violations, cls_violations = _metric_trend(df, "red_light_violations")
     trend_queue, cls_queue = _metric_trend(df, "queue_count")
+    trend_density, cls_density = _metric_trend(df, "queue_density")
+    avg_density_kpi = _queue_density_avg(df)
 
     camera_rows = _build_camera_rows(df)
     violation_rows = _build_recent_violations(df)
@@ -328,57 +378,27 @@ def show():
             padding: 8px 6px 14px 6px;
         }
 
-        .topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 18px 20px;
-            border-radius: 16px;
-            background: linear-gradient(180deg, #ffffff 0%, #f6f9fc 100%);
+        .hero-card {
+            background: linear-gradient(180deg, #ffffff 0%, #f7fafd 100%);
             border: 1px solid #e6edf4;
-            box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
-            margin-bottom: 16px;
-        }
-
-        div[data-testid="stHorizontalBlock"]:has(.top-left) {
-            background: #ffffff;
-            border: 1px solid #e6edf4;
-            border-radius: 16px;
-            padding: 14px 16px;
-            box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
-            margin-bottom: 16px;
+            border-radius: 18px;
+            box-shadow: 0 10px 26px rgba(16, 24, 40, 0.06);
+            padding: 16px 18px;
+            margin-bottom: 14px;
         }
 
         .top-left {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 14px;
+            min-height: 64px;
         }
 
         .burger {
-            font-size: 18px;
+            font-size: 28px;
             color: #0f172a;
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .brand-logo {
-            width: 44px;
-            height: 44px;
-            border-radius: 14px;
-            background: linear-gradient(135deg, #14b8a6, #0ea5e9);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #ffffff;
-            font-weight: 800;
-            font-size: 16px;
-            box-shadow: 0 10px 24px rgba(14, 116, 144, 0.25);
+            line-height: 1;
+            margin-top: -6px;
         }
 
         .titleblock h1 {
@@ -396,46 +416,42 @@ def show():
         }
 
         .search-wrap div[data-testid="stTextInput"] input {
-            width: 280px;
+            width: 100%;
             background: #ffffff;
-            border: 1px solid #d8e0ea;
+            border: 1px solid #d7e1eb;
             border-radius: 12px;
-            padding: 8px 12px;
+            padding: 10px 12px;
             color: #6b7280;
             font-size: 14px;
         }
 
         .bell {
-            width: 36px;
-            height: 36px;
+            width: 42px;
+            height: 42px;
             border-radius: 12px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid #dce5ef;
             display: flex;
             align-items: center;
             justify-content: center;
             color: #64748b;
             background: #ffffff;
+            font-size: 20px;
         }
 
-        .avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: #14b8a6;
-            color: #ffffff;
+        .user-row {
             display: flex;
             align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 12px;
+            gap: 10px;
+            justify-content: flex-end;
+            width: 100%;
         }
 
         .user-chip {
             background: #ffffff;
-            border: 1px solid #dbe4ef;
+            border: 1px solid #d7e1eb;
             border-radius: 12px;
-            padding: 8px 12px;
-            min-width: 230px;
+            padding: 8px 12px 7px 12px;
+            min-width: 180px;
         }
 
         .user-chip .name {
@@ -447,6 +463,25 @@ def show():
         .user-chip .meta {
             font-size: 12px;
             color: #64748b;
+        }
+
+        .avatar {
+            width: 42px;
+            height: 42px;
+            min-width: 42px;
+            min-height: 42px;
+            flex: 0 0 42px;
+            aspect-ratio: 1 / 1;
+            border-radius: 999px !important;
+            background: linear-gradient(135deg, #14b8a6, #0ea5e9);
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 14px;
+            line-height: 1;
+            box-shadow: 0 8px 20px rgba(14, 165, 233, 0.24);
         }
 
         .flow-grid {
@@ -479,7 +514,7 @@ def show():
 
         .dist-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 10px;
         }
 
@@ -714,13 +749,11 @@ def show():
             font-weight: 600;
         }
 
-        @media (max-width: 1200px) {
-            .search-wrap div[data-testid="stTextInput"] input { width: 220px; }
-        }
-
         @media (max-width: 900px) {
-            .topbar { flex-direction: column; align-items: flex-start; }
-            .search-wrap div[data-testid="stTextInput"] input, .user-chip { width: 100%; }
+            .search-wrap div[data-testid="stTextInput"] input,
+            .user-chip { width: 100%; min-width: unset; }
+            .user-row { width: 100%; }
+            .dist-grid { grid-template-columns: repeat(2, 1fr); }
         }
         </style>
         """,
@@ -729,12 +762,19 @@ def show():
 
     st.markdown("<div class='dash-root'>", unsafe_allow_html=True)
 
-    top_left, top_right = st.columns([3, 2])
+    username = str(st.session_state.get("username", "User"))
+    role = str(st.session_state.get("role", "user")).title()
+    safe_username = html.escape(username)
+    safe_role = html.escape(role)
+    initials = "".join([part[0].upper() for part in username.split()[:2]]) or "U"
+
+    st.markdown('<div class="hero-card">', unsafe_allow_html=True)
+    top_left, top_right = st.columns([8, 7])
     with top_left:
         st.markdown(
             """
             <div class="top-left">
-                <span class="burger">☰</span>
+                <span class="burger">&#9776;</span>
                 <div class="titleblock">
                     <h1>Traffic Intelligence System</h1>
                     <p>AI-Powered Traffic Analysis &amp; Violation Detection</p>
@@ -744,27 +784,29 @@ def show():
             unsafe_allow_html=True,
         )
     with top_right:
-        st.markdown("<div class='top-right'>", unsafe_allow_html=True)
-        st.markdown("<div class='search-wrap'>", unsafe_allow_html=True)
-        st.text_input("Search", key="dash_search", label_visibility="collapsed", placeholder="Search...")
-        st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("<div class='bell'>🔔</div>", unsafe_allow_html=True)
-        username = st.session_state.get("username", "User")
-        role = st.session_state.get("role", "user").title()
-        initials = "".join([part[0].upper() for part in str(username).split()[:2]]) or "U"
-        st.markdown(
-            f"""
-            <div class="user-chip">
-                <div class="name">{username}</div>
-                <div class="meta">{role}</div>
-            </div>
-            <div class="avatar">{initials}</div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        search_col, bell_col, user_col = st.columns([7, 1, 5])
+        with search_col:
+            st.markdown("<div class='search-wrap'>", unsafe_allow_html=True)
+            st.text_input("Search", key="dash_search", label_visibility="collapsed", placeholder="Search...")
+            st.markdown("</div>", unsafe_allow_html=True)
+        with bell_col:
+            st.markdown('<div class="bell">&#128276;</div>', unsafe_allow_html=True)
+        with user_col:
+            st.markdown(
+                f"""
+                <div class="user-row">
+                    <div class="user-chip">
+                        <div class="name">{safe_username}</div>
+                        <div class="meta">{safe_role}</div>
+                    </div>
+                    <div class="avatar">{html.escape(initials)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    header_left, header_right = st.columns([3, 1])
+    header_left, header_right = st.columns([4, 1])
     with header_left:
         st.markdown(
             """
@@ -811,15 +853,16 @@ def show():
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
     kpi_html = [
         (_lucide_svg("camera"), "#dffaf3", "#0f9f96", "Active Cameras", active_cameras, trend_active, cls_active),
         (_lucide_svg("car"), "#fff4dd", "#ea580c", "Vehicles Detected", total_vehicles, trend_vehicles, cls_vehicles),
         (_lucide_svg("alert-triangle"), "#ffe4e6", "#dc2626", "Violations Today", violations_today, trend_violations, cls_violations),
         (_lucide_svg("map-pin"), "#e8ecff", "#4f46e5", "Avg Queue Length", queue_count, trend_queue, cls_queue),
+        (_lucide_svg("map-pin"), "#e8fff4", "#0f9f5f", "Queue Density", f"{avg_density_kpi:.4f}", trend_density, cls_density),
     ]
 
-    for col, (icon_svg, bg, icon_color, label, value, trend, trend_cls) in zip([c1, c2, c3, c4], kpi_html):
+    for col, (icon_svg, bg, icon_color, label, value, trend, trend_cls) in zip([c1, c2, c3, c4, c5], kpi_html):
         with col:
             st.markdown(
                 f"""
@@ -867,7 +910,7 @@ def show():
                             <div class="vio-icon">AL</div>
                             <div>
                                 <p class="vio-type">{row['type']}</p>
-                                <p class="vio-loc">{row.get('location', 'Location')} • {row['camera_id']}</p>
+                                <p class="vio-loc">{row.get('location', 'Location')} &bull; {row['camera_id']}</p>
                             </div>
                         </div>
                         <div class="vio-right">
@@ -979,6 +1022,7 @@ def show():
         bikes = _to_int(metrics.get("bikes", 0), 0)
         buses = _to_int(metrics.get("buses", 0), 0)
         trucks = _to_int(metrics.get("trucks", 0), 0)
+        autos = _to_int(metrics.get("autos", 0), 0)
 
         st.markdown(
             f"""
@@ -998,6 +1042,10 @@ def show():
                 <div class="dist-card" style="background:#ffe4e6;">
                     <div class="dist-title">Trucks</div>
                     <div class="dist-value">{trucks}</div>
+                </div>
+                <div class="dist-card" style="background:#fdf2f8;">
+                    <div class="dist-title">Autos</div>
+                    <div class="dist-value">{autos}</div>
                 </div>
             </div>
             """,
@@ -1034,7 +1082,4 @@ def show():
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-
-
 

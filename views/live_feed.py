@@ -30,7 +30,7 @@ def _init_state():
         "run_dir": None,
         "processed_video_path": None,
         "violations_df": None,
-        "vehicle_counts": {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0},
+        "vehicle_counts": {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0, "autos": 0},
         "processed": False,
         "df": None,
         "metrics": {
@@ -42,6 +42,7 @@ def _init_state():
             "bikes": 0,
             "buses": 0,
             "trucks": 0,
+            "autos": 0,
         },
     }
     for key, value in defaults.items():
@@ -71,6 +72,13 @@ def _icon_svg(name: str) -> str:
         "truck": (
             '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">'
             '<path d="M3 7h11v9H3z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>'
+            "</svg>"
+        ),
+        "auto": (
+            '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">'
+            '<path d="M4 13h16l-1.2-4a2 2 0 0 0-1.9-1.4H7.1A2 2 0 0 0 5.2 9z"/>'
+            '<path d="M4 13v4h2m14-4v4h-2"/><path d="M8 8V6h8v2"/>'
+            '<circle cx="8" cy="17" r="2"/><circle cx="16" cy="17" r="2"/>'
             "</svg>"
         ),
     }
@@ -103,6 +111,7 @@ def _append_live_row(camera_id: str, counts: dict, queue_count: int, events: lis
             rash += 1
 
     total = int(sum(counts.values()))
+    queue_density = float(queue_count) / float(max(1, total))
 
     row = {
         "frame": int(frame_idx),
@@ -112,8 +121,10 @@ def _append_live_row(camera_id: str, counts: dict, queue_count: int, events: lis
         "bikes": int(counts.get("bikes", 0)),
         "buses": int(counts.get("buses", 0)),
         "trucks": int(counts.get("trucks", 0)),
+        "autos": int(counts.get("autos", 0)),
         "total_vehicles": total,
         "queue_count": int(queue_count),
+        "queue_density": queue_density,
         "red_light_violations": red,
         "rash_driving": rash,
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -126,8 +137,10 @@ def _append_live_row(camera_id: str, counts: dict, queue_count: int, events: lis
         "bikes": row["bikes"],
         "buses": row["buses"],
         "trucks": row["trucks"],
+        "autos": row["autos"],
         "total_vehicles": row["total_vehicles"],
         "queue_count": row["queue_count"],
+        "queue_density_avg": row["queue_density"],
         "red_light_violations": row["red_light_violations"],
         "rash_driving": row["rash_driving"],
     }
@@ -135,14 +148,15 @@ def _append_live_row(camera_id: str, counts: dict, queue_count: int, events: lis
 
 def _render_kpis(holder, counts):
     with holder.container():
-        k1, k2, k3, k4 = st.columns(4)
+        k1, k2, k3, k4, k5 = st.columns(5)
         cards = [
             ("Cars", counts.get("cars", 0), "car", "#dffaf3", "#0f9f96"),
             ("Bikes", counts.get("bikes", 0), "bike", "#fff4dd", "#ea580c"),
             ("Buses", counts.get("buses", 0), "bus", "#e8ecff", "#4f46e5"),
             ("Trucks", counts.get("trucks", 0), "truck", "#ffe4e6", "#dc2626"),
+            ("Autos", counts.get("autos", 0), "auto", "#fdf2f8", "#db2777"),
         ]
-        for col, (title, value, icon_key, bg, fg) in zip([k1, k2, k3, k4], cards):
+        for col, (title, value, icon_key, bg, fg) in zip([k1, k2, k3, k4, k5], cards):
             with col:
                 st.markdown(
                     f"""
@@ -266,12 +280,13 @@ def show():
             st.session_state.live_frame_index = 0
             st.session_state.live_rows = []
             st.session_state.live_event_log = []
-            st.session_state.vehicle_counts = {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0}
+            st.session_state.vehicle_counts = {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0, "autos": 0}
             st.session_state.metrics = {
                 "cars": 0,
                 "bikes": 0,
                 "buses": 0,
                 "trucks": 0,
+                "autos": 0,
                 "total_vehicles": 0,
                 "queue_count": 0,
                 "red_light_violations": 0,

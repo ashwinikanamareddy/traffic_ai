@@ -1,4 +1,4 @@
-﻿import cv2
+import cv2
 
 try:
     from ultralytics import YOLO
@@ -15,24 +15,53 @@ class _VehicleDetector:
         5: "bus",
         7: "truck",
     }
+    AUTO_LABEL_ALIASES = {
+        "auto",
+        "auto rickshaw",
+        "auto-rickshaw",
+        "autorickshaw",
+        "rickshaw",
+        "three wheeler",
+        "three-wheeler",
+        "three_wheeler",
+        "tuk tuk",
+        "tuktuk",
+    }
 
     def __init__(self):
         self.model = None
         self.model_ready = False
+        self.runtime_class_map = dict(self.VEHICLE_CLASS_MAP)
         self._load_model()
+
+    def _build_runtime_class_map(self):
+        class_map = dict(self.VEHICLE_CLASS_MAP)
+        if self.model is None:
+            self.runtime_class_map = class_map
+            return
+        names = getattr(self.model, "names", {}) or {}
+        if isinstance(names, list):
+            names = {i: n for i, n in enumerate(names)}
+        for cls_id, cls_name in names.items():
+            name = str(cls_name).lower().replace("_", " ").strip()
+            if name in self.AUTO_LABEL_ALIASES:
+                class_map[int(cls_id)] = "auto"
+        self.runtime_class_map = class_map
 
     def _load_model(self):
         if YOLO is None:
             return
         try:
             self.model = YOLO("yolov8n.pt")
+            self._build_runtime_class_map()
             self.model_ready = True
         except Exception:
             self.model = None
             self.model_ready = False
+            self.runtime_class_map = dict(self.VEHICLE_CLASS_MAP)
 
     def detect(self, frame, conf_threshold=0.35, imgsz=480):
-        counts = {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0}
+        counts = {"cars": 0, "bikes": 0, "buses": 0, "trucks": 0, "autos": 0}
         if frame is None:
             return [], counts, 0
 
@@ -49,7 +78,7 @@ class _VehicleDetector:
             iou=0.5,
             verbose=False,
             imgsz=imgsz,
-            classes=list(self.VEHICLE_CLASS_MAP.keys()),
+            classes=list(self.runtime_class_map.keys()),
         )
 
         if not results:
@@ -64,11 +93,12 @@ class _VehicleDetector:
             "bike": "bikes",
             "bus": "buses",
             "truck": "trucks",
+            "auto": "autos",
         }
 
         for b in boxes:
             cls_id = int(b.cls.item())
-            vehicle_type = self.VEHICLE_CLASS_MAP.get(cls_id)
+            vehicle_type = self.runtime_class_map.get(cls_id)
             if vehicle_type is None:
                 continue
 

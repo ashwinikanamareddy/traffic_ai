@@ -45,17 +45,16 @@ def show():
             margin-bottom: 1rem;
         }
         .login-logo {
-            width: 68px;
-            height: 68px;
+            width: 76px;
+            height: 76px;
             margin: 0 auto 12px auto;
-            border-radius: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            color: #ffffff;
-            background: linear-gradient(135deg, #14b8a6, #0ea5e9);
+            border-radius: 50%;
+            background-color: #ffffff;
             border: 1px solid #e2e8f0;
+            background-size: 66px 66px;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='29' fill='none' stroke='%23111827' stroke-width='2.6'/><path d='M19 44 32 40 45 44 41 52H23z' fill='%23111827'/><path d='M28 30h8c2.4 0 4.5 1.4 5.6 3.5l1.8 3.5v7.2a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-2-2v-1h-12v1a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-2-2V37l1.8-3.5A6.2 6.2 0 0 1 28 30z' fill='none' stroke='%23111827' stroke-width='2'/><path d='M21 41h5m17 0h-5' stroke='%23111827' stroke-width='2' stroke-linecap='round'/><path d='M18 19h8l1.2 1.2-2.6 1.8h-1.4l-5.2-1.8z' fill='%23111827'/><path d='M16 20.5h7.2c1.1 0 2.2.3 3.1.9l.8.5-2.1 3.2-.7-.5a3.3 3.3 0 0 0-2-.6H16z' fill='%23111827'/><rect x='43.2' y='17.8' width='6' height='15.6' rx='1.5' fill='%23111827'/><circle cx='46.2' cy='20.6' r='1.1' fill='white'/><circle cx='46.2' cy='25.6' r='1.1' fill='white'/><circle cx='46.2' cy='30.6' r='1.1' fill='white'/><path d='M20 18a20 20 0 0 1 24 0' fill='none' stroke='%23111827' stroke-width='2.2' stroke-linecap='round'/></svg>");
             box-shadow: 0 16px 35px rgba(15, 23, 42, 0.18);
         }
         .login-title {
@@ -162,7 +161,7 @@ def show():
     st.markdown(
         """
         <div class="login-wrap">
-            <div class="login-logo">TA</div>
+            <div class="login-logo"></div>
             <h1 class="login-title">TrafficAI Login</h1>
             <p class="login-sub">Sign in as Admin or User to access traffic intelligence modules.</p>
         </div>
