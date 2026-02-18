@@ -307,7 +307,13 @@ def _save_clip(clip_path, frames, fps):
     writer.release()
 
 
-def process_full_video(video_path, frame_stride=3, resize_width=960):
+def process_full_video(
+    video_path,
+    frame_stride=3,
+    resize_width=960,
+    detect_imgsz=416,
+    conf_threshold=0.35,
+):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = os.path.join("history", f"run_{timestamp}")
     os.makedirs(run_dir, exist_ok=True)
@@ -375,8 +381,8 @@ def process_full_video(video_path, frame_stride=3, resize_width=960):
     pending_evidence = []
 
     settings = {
-        "conf_threshold": 0.35,
-        "detect_imgsz": 416,
+        "conf_threshold": float(conf_threshold),
+        "detect_imgsz": int(detect_imgsz),
     }
 
     while True:

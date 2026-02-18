@@ -354,9 +354,14 @@ def show():
 
     camera_id = _camera_id_from_file(current_path)
 
+    rendered_any_frame = False
     while st.session_state.live_running and not st.session_state.live_paused:
         ok, frame = cap.read()
         if not ok:
+            if not rendered_any_frame:
+                frame_placeholder.error(
+                    "Unable to decode frames from this video. Try a standard H.264 MP4 file."
+                )
             st.session_state.live_running = False
             break
 
@@ -393,6 +398,7 @@ def show():
 
         rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
         frame_placeholder.image(rgb, channels="RGB", width="stretch")
+        rendered_any_frame = True
         _render_kpis(kpi_placeholder, st.session_state.vehicle_counts)
         _render_event_panel(event_placeholder)
 
