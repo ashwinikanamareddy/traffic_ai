@@ -1,16 +1,7 @@
 import streamlit as st
+import importlib
 
 from backend.auth import init_db
-import views.dashboard as dashboard
-import views.export as export
-import views.insights as insights
-import views.live_feed as live_feed
-import views.login as login
-import views.queue as queue
-import views.system_health as system_health
-import views.statistics as statistics
-import views.violation_evidence as violation_evidence
-import views.violations as violations
 
 
 st.set_page_config(
@@ -62,8 +53,19 @@ if "selected_violation" not in st.session_state:
     st.session_state.selected_violation = None
 
 
+def _load_view_module(module_name):
+    try:
+        return importlib.import_module(module_name)
+    except Exception as exc:
+        st.error(f"Failed to load module `{module_name}`.")
+        st.exception(exc)
+        return None
+
+
 if not st.session_state.logged_in:
-    login.show()
+    login_module = _load_view_module("views.login")
+    if login_module and hasattr(login_module, "show"):
+        login_module.show()
     st.stop()
 
 with st.sidebar:
@@ -285,23 +287,20 @@ with st.sidebar:
 
 page = st.session_state.get("page", "Dashboard")
 
-if page == "Dashboard":
-    dashboard.show()
-elif page == "Upload":
-    live_feed.show()
-elif page == "LiveFeed":
-    live_feed.show()
-elif page == "Queue":
-    queue.show()
-elif page == "Violations":
-    violations.show()
-elif page == "ViolationEvidence":
-    violation_evidence.show()
-elif page == "Statistics":
-    statistics.show()
-elif page == "Export":
-    export.show()
-elif page == "Insights":
-    insights.show()
-elif page == "Health":
-    system_health.show()
+page_to_module = {
+    "Dashboard": "views.dashboard",
+    "Upload": "views.live_feed",
+    "LiveFeed": "views.live_feed",
+    "Queue": "views.queue",
+    "Violations": "views.violations",
+    "ViolationEvidence": "views.violation_evidence",
+    "Statistics": "views.statistics",
+    "Export": "views.export",
+    "Insights": "views.insights",
+    "Health": "views.system_health",
+}
+
+module_name = page_to_module.get(page, "views.dashboard")
+page_module = _load_view_module(module_name)
+if page_module and hasattr(page_module, "show"):
+    page_module.show()

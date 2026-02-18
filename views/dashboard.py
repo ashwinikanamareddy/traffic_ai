@@ -5,7 +5,6 @@ import os
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-from backend.process_video import process_full_video
 
 
 def _init_state():
@@ -832,6 +831,12 @@ def show():
     st.markdown("### Process Video From Dashboard")
     up_col, btn_col = st.columns([4, 1])
     dash_upload = up_col.file_uploader("Upload Traffic Video", type=["mp4", "avi", "mov", "mkv"], key="dashboard_video_upload")
+    speed_preset = st.selectbox(
+        "Processing Speed",
+        options=["Fast", "Balanced", "High Accuracy"],
+        index=0,
+        help="Fast reduces processing time by skipping more frames and using smaller AI input size.",
+    )
     run_dash = btn_col.button("Process", key="dashboard_process_btn", width="stretch")
 
     if run_dash:
@@ -840,8 +845,29 @@ def show():
         else:
             video_path = _save_uploaded_file(dash_upload)
             st.session_state.last_uploaded_video_path = video_path
-            with st.spinner("Processing video..."):
-                results = process_full_video(video_path, frame_stride=15, resize_width=520)
+            preset_config = {
+                "Fast": {"frame_stride": 24, "resize_width": 416, "detect_imgsz": 256},
+                "Balanced": {"frame_stride": 15, "resize_width": 520, "detect_imgsz": 320},
+                "High Accuracy": {"frame_stride": 10, "resize_width": 640, "detect_imgsz": 416},
+            }
+            cfg = preset_config.get(speed_preset, preset_config["Fast"])
+            with st.spinner(f"Processing video ({speed_preset.lower()})..."):
+                try:
+                    from backend.process_video import process_full_video
+
+                    results = process_full_video(
+                        video_path,
+                        frame_stride=cfg["frame_stride"],
+                        resize_width=cfg["resize_width"],
+                        detect_imgsz=cfg["detect_imgsz"],
+                    )
+                except Exception as exc:
+                    st.error("Video processing failed: OpenCV dependency could not be loaded.")
+                    st.info(
+                        "If this is Streamlit Cloud, ensure OpenCV dependencies are installed and rebuild the app."
+                    )
+                    st.exception(exc)
+                    return
 
             st.session_state.df = results.get("df", pd.DataFrame())
             st.session_state.metrics = results.get("metrics", {})
