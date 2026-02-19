@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -16,8 +16,37 @@ def annotate_frame(
     signal_state: str,
     frame_violations: List[Dict],
     queue_stats: Dict,
+    lane_polygons: Optional[List[List[Tuple[float, float]]]] = None,
 ):
     canvas = frame.copy()
+
+    lane_colors = [
+        (255, 165, 0),
+        (0, 255, 0),
+        (255, 0, 0),
+        (0, 255, 255),
+        (255, 0, 255),
+        (128, 255, 128),
+    ]
+
+    if lane_polygons:
+        for idx, lane in enumerate(lane_polygons):
+            lane_pts = _as_np_points(lane)
+            if len(lane_pts) < 3:
+                continue
+            color = lane_colors[idx % len(lane_colors)]
+            cv2.polylines(canvas, [lane_pts], True, color, 2)
+            centroid = np.mean(lane_pts.reshape(-1, 2), axis=0)
+            cv2.putText(
+                canvas,
+                f"Lane {idx + 1}",
+                (int(centroid[0]), int(centroid[1])),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                color,
+                2,
+                cv2.LINE_AA,
+            )
 
     # Queue zone overlay
     poly = _as_np_points(queue_polygon)

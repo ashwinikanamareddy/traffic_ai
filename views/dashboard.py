@@ -16,8 +16,13 @@ def _init_state():
         st.session_state.metrics = {
             "total_vehicles": 0,
             "queue_count": 0,
+            "total_violations": 0,
             "red_light_violations": 0,
             "rash_driving": 0,
+            "no_helmet_violations": 0,
+            "mobile_usage_violations": 0,
+            "triple_riding_violations": 0,
+            "heavy_load_violations": 0,
             "autos": 0,
         }
     if "dash_search" not in st.session_state:
@@ -326,7 +331,7 @@ def show():
 
     total_vehicles = _to_int(metrics.get("total_vehicles", 0), 0)
     queue_count = _to_int(metrics.get("queue_count", 0), 0)
-    violations_today = _to_int(metrics.get("red_light_violations", 0), 0)
+    violations_today = _to_int(metrics.get("total_violations", metrics.get("red_light_violations", 0)), 0)
     active_cameras = _active_cameras(df)
 
     now = datetime.now()
@@ -338,7 +343,10 @@ def show():
 
     trend_active, cls_active = _active_camera_trend(df)
     trend_vehicles, cls_vehicles = _metric_trend(df, "total_vehicles")
-    trend_violations, cls_violations = _metric_trend(df, "red_light_violations")
+    trend_violations_col = "red_light_violations"
+    if isinstance(df, pd.DataFrame) and "total_violations" in df.columns:
+        trend_violations_col = "total_violations"
+    trend_violations, cls_violations = _metric_trend(df, trend_violations_col)
     trend_queue, cls_queue = _metric_trend(df, "queue_count")
     trend_density, cls_density = _metric_trend(df, "queue_density")
     avg_density_kpi = _queue_density_avg(df)
@@ -831,12 +839,75 @@ def show():
     st.markdown("### Process Video From Dashboard")
     up_col, btn_col = st.columns([4, 1])
     dash_upload = up_col.file_uploader("Upload Traffic Video", type=["mp4", "avi", "mov", "mkv"], key="dashboard_video_upload")
+    dash_config = up_col.file_uploader(
+        "Upload Geometry Config (JSON)",
+        type=["json"],
+        key="dashboard_geometry_config_upload",
+        help="Use output from scripts/config_tool.py (stop_line + lanes).",
+    )
     speed_preset = st.selectbox(
         "Processing Speed",
         options=["Fast", "Balanced", "High Accuracy"],
         index=0,
         help="Fast reduces processing time by skipping more frames and using smaller AI input size.",
     )
+    with st.expander("Violation Sensitivity", expanded=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            speed_threshold = st.slider("Rash Speed Threshold", min_value=10.0, max_value=80.0, value=32.0, step=1.0)
+            acceleration_threshold = st.slider(
+                "Rash Acceleration Threshold",
+                min_value=5.0,
+                max_value=40.0,
+                value=18.0,
+                step=1.0,
+            )
+            direction_change_threshold = st.slider(
+                "Sharp Turn Threshold",
+                min_value=10.0,
+                max_value=90.0,
+                value=48.0,
+                step=1.0,
+            )
+        with c2:
+            zigzag_heading_threshold = st.slider(
+                "Zig-Zag Heading Threshold",
+                min_value=5.0,
+                max_value=45.0,
+                value=20.0,
+                step=1.0,
+            )
+            triple_riding_min_persons = st.slider(
+                "Triple Riding Rider Count",
+                min_value=3,
+                max_value=5,
+                value=3,
+                step=1,
+            )
+            heavy_load_min_persons = st.slider(
+                "Heavy Load Rider Count",
+                min_value=4,
+                max_value=6,
+                value=4,
+                step=1,
+            )
+        c3, c4 = st.columns(2)
+        with c3:
+            association_iou_threshold = st.slider(
+                "Person-Vehicle IoU Match",
+                min_value=0.0,
+                max_value=0.2,
+                value=0.01,
+                step=0.005,
+            )
+        with c4:
+            association_center_margin = st.slider(
+                "Center Match Margin",
+                min_value=0.0,
+                max_value=0.6,
+                value=0.25,
+                step=0.05,
+            )
     run_dash = btn_col.button("Process", key="dashboard_process_btn", width="stretch")
 
     if run_dash:
@@ -845,6 +916,10 @@ def show():
         else:
             video_path = _save_uploaded_file(dash_upload)
             st.session_state.last_uploaded_video_path = video_path
+            config_path = None
+            if dash_config:
+                config_path = _save_uploaded_file(dash_config)
+                st.session_state.geometry_config_path = config_path
             preset_config = {
                 "Fast": {"frame_stride": 24, "resize_width": 416, "detect_imgsz": 256},
                 "Balanced": {"frame_stride": 15, "resize_width": 520, "detect_imgsz": 320},
@@ -857,14 +932,23 @@ def show():
 
                     results = process_full_video(
                         video_path,
+                        config_path=config_path,
                         frame_stride=cfg["frame_stride"],
                         resize_width=cfg["resize_width"],
                         detect_imgsz=cfg["detect_imgsz"],
+                        speed_threshold=float(speed_threshold),
+                        acceleration_threshold=float(acceleration_threshold),
+                        direction_change_threshold=float(direction_change_threshold),
+                        zigzag_heading_threshold=float(zigzag_heading_threshold),
+                        triple_riding_min_persons=int(triple_riding_min_persons),
+                        heavy_load_min_persons=int(heavy_load_min_persons),
+                        association_iou_threshold=float(association_iou_threshold),
+                        association_center_margin=float(association_center_margin),
                     )
                 except Exception as exc:
-                    st.error("Video processing failed: OpenCV dependency could not be loaded.")
+                    st.error("Video processing failed.")
                     st.info(
-                        "If this is Streamlit Cloud, ensure OpenCV dependencies are installed and rebuild the app."
+                        "Check that OpenCV dependencies are installed and your geometry JSON format is valid."
                     )
                     st.exception(exc)
                     return
@@ -875,7 +959,14 @@ def show():
             st.session_state.processed_video_path = results.get("output_video_path")
             st.session_state.violations_df = results.get("violations_df", pd.DataFrame())
             st.session_state.processed = True
+            st.session_state.lane_count = int(results.get("lane_count", 0))
+            st.session_state.config_source = results.get("config_source", "default")
             st.success("Video processed successfully from dashboard.")
+            if st.session_state.lane_count > 0:
+                st.info(
+                    f"Applied geometry config with {st.session_state.lane_count} lane polygon(s). "
+                    f"Stop line + lanes are rendered in processed frames."
+                )
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1085,7 +1176,17 @@ def show():
 
         cols = [
             col
-            for col in ["queue_count", "red_light_violations", "rash_driving", "total_vehicles"]
+            for col in [
+                "queue_count",
+                "red_light_violations",
+                "rash_driving",
+                "no_helmet_violations",
+                "mobile_usage_violations",
+                "triple_riding_violations",
+                "heavy_load_violations",
+                "total_violations",
+                "total_vehicles",
+            ]
             if col in df.columns
         ]
 

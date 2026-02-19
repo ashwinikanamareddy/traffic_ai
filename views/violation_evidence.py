@@ -56,6 +56,18 @@ def _zip_evidence_folder(folder_path):
     return buffer
 
 
+def _resolve_evidence_path(violation: dict) -> str:
+    evidence_path = str(violation.get("evidence_path", "") or "").strip()
+    if evidence_path and os.path.exists(evidence_path):
+        return evidence_path
+    vid = str(violation.get("violation_id", "") or "").strip()
+    if vid:
+        alt = os.path.join("evidence", vid)
+        if os.path.exists(alt):
+            return alt
+    return evidence_path
+
+
 def show():
     st.markdown(
         """
@@ -319,7 +331,7 @@ def show():
                     st.session_state.violations[idx]["status"] = "Rejected"
         st.markdown("</div>", unsafe_allow_html=True)
 
-        evidence_path = sel.get("evidence_path", "")
+        evidence_path = _resolve_evidence_path(sel)
         before_path = os.path.join(evidence_path, "before.jpg")
         moment_path = os.path.join(evidence_path, "moment.jpg")
         after_path = os.path.join(evidence_path, "after.jpg")
@@ -347,12 +359,26 @@ def show():
                     st.caption("After Violation")
                     st.image(after_path, width="stretch")
             st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(
+                "<div class='panel' style='margin-top:12px;'><div class='muted'>Evidence images not found.</div></div>",
+                unsafe_allow_html=True,
+            )
 
         if clip_exists:
             st.markdown("<div class='panel' style='margin-top:12px;'>", unsafe_allow_html=True)
             st.markdown("<div class='section-title'>\U0001F3A5 Video Evidence</div>", unsafe_allow_html=True)
-            st.video(clip_path)
+            try:
+                with open(clip_path, "rb") as f:
+                    st.video(f.read())
+            except Exception:
+                st.video(clip_path)
             st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(
+                "<div class='panel' style='margin-top:12px;'><div class='muted'>Violation clip not found.</div></div>",
+                unsafe_allow_html=True,
+            )
 
         st.markdown("<div class='panel' style='margin-top:12px;'>", unsafe_allow_html=True)
         st.markdown("<div class='section-title'>AI Analysis Report</div>", unsafe_allow_html=True)

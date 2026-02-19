@@ -1,4 +1,5 @@
 import os
+import json
 from collections import deque
 from datetime import datetime
 
@@ -14,6 +15,11 @@ from backend.visualization import annotate_frame
 
 def _draw_overlays(frame, detections, settings, queue_zone_y, events):
     processed = frame.copy()
+    violation_active = any(e.get("type") == "violation" for e in events)
+    violation_event = next((e for e in events if e.get("type") == "violation"), None)
+    violation_label = ""
+    if violation_event:
+        violation_label = str(violation_event.get("violation_type", "")).strip() or "Violation"
 
     if settings.get("queue_zones", True):
         cv2.line(processed, (0, queue_zone_y), (processed.shape[1], queue_zone_y), (255, 215, 0), 2)
@@ -39,8 +45,13 @@ def _draw_overlays(frame, detections, settings, queue_zone_y, events):
         for idx, det in enumerate(detections, start=1):
             x, y, w, h = det["bbox"]
             label = det["type"]
-            color = color_map.get(label, (255, 255, 255))
-            cv2.rectangle(processed, (x, y), (x + w, y + h), color, 2)
+            if violation_active and settings.get("highlight_violation_red", True):
+                color = (0, 0, 255)
+                thickness = 3
+            else:
+                color = color_map.get(label, (255, 255, 255))
+                thickness = 2
+            cv2.rectangle(processed, (x, y), (x + w, y + h), color, thickness)
 
             if settings.get("vehicle_ids", True):
                 text = f"{label.upper()}-{idx:02d}"
@@ -72,6 +83,30 @@ def _draw_overlays(frame, detections, settings, queue_zone_y, events):
                 2,
                 cv2.LINE_AA,
             )
+
+    if violation_active and settings.get("highlight_violation_red", True):
+        h, w = processed.shape[:2]
+        cv2.rectangle(processed, (0, 0), (w - 1, h - 1), (0, 0, 255), 6)
+        cv2.putText(
+            processed,
+            "VIOLATION DETECTED",
+            (14, max(66, int(0.08 * h))),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.78,
+            (0, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            processed,
+            f"Type: {violation_label}",
+            (14, max(90, int(0.12 * h))),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (0, 0, 255),
+            2,
+            cv2.LINE_AA,
+        )
 
     return processed
 
@@ -120,6 +155,7 @@ def process_frame(frame, settings=None, frame_number=0, camera_id="CAM-01", draw
         events.append(
             {
                 "type": "violation",
+                "violation_type": "Heavy Congestion",
                 "severity": "danger",
                 "camera_id": camera_id,
                 "frame": int(frame_number),
@@ -146,6 +182,71 @@ def process_frame(frame, settings=None, frame_number=0, camera_id="CAM-01", draw
 def _default_stop_line(width: int, height: int):
     y = int(height * 0.52)
     return ((0.0, float(y)), (float(width), float(y)))
+
+
+def _normalize_line(raw_line):
+    if not isinstance(raw_line, list) or len(raw_line) != 2:
+        return None
+    try:
+        p1 = raw_line[0]
+        p2 = raw_line[1]
+        if not (isinstance(p1, list) and isinstance(p2, list) and len(p1) == 2 and len(p2) == 2):
+            return None
+        return (
+            (float(p1[0]), float(p1[1])),
+            (float(p2[0]), float(p2[1])),
+        )
+    except Exception:
+        return None
+
+
+def _normalize_polygon(raw_polygon):
+    if not isinstance(raw_polygon, list) or len(raw_polygon) < 3:
+        return None
+    out = []
+    try:
+        for pt in raw_polygon:
+            if not isinstance(pt, list) or len(pt) != 2:
+                return None
+            out.append((float(pt[0]), float(pt[1])))
+    except Exception:
+        return None
+    return out if len(out) >= 3 else None
+
+
+def _load_geometry_config(config_path, frame_width: int, frame_height: int):
+    stop_line = _default_stop_line(frame_width, frame_height)
+    lanes = []
+    source = "default"
+
+    if not config_path:
+        return stop_line, lanes, source
+
+    if not os.path.exists(config_path):
+        raise ValueError(f"Configuration file not found: {config_path}")
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception as exc:
+        raise ValueError(f"Invalid JSON config: {config_path}") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("Configuration JSON must be an object with keys: stop_line, lanes")
+
+    parsed_line = _normalize_line(payload.get("stop_line"))
+    if parsed_line is not None:
+        stop_line = parsed_line
+
+    raw_lanes = payload.get("lanes")
+    if isinstance(raw_lanes, list):
+        for lane in raw_lanes:
+            poly = _normalize_polygon(lane)
+            if poly is not None:
+                lanes.append(poly)
+
+    source = os.path.abspath(config_path)
+    return stop_line, lanes, source
 
 
 def _explode_violation_types(df: pd.DataFrame) -> pd.Series:
@@ -193,7 +294,14 @@ def _build_violations_df_from_df(df: pd.DataFrame) -> pd.DataFrame:
 
 def _build_final_metrics(df: pd.DataFrame):
     if df.empty:
-        violation_breakdown = {"Red Light Jump": 0, "Rash Driving": 0}
+        violation_breakdown = {
+            "Red Light Jump": 0,
+            "Rash Driving": 0,
+            "No Helmet": 0,
+            "Mobile Usage While Driving": 0,
+            "Triple Riding": 0,
+            "Heavy Load": 0,
+        }
         return {
             "total_vehicles_detected": 0,
             "cars": 0,
@@ -209,6 +317,10 @@ def _build_final_metrics(df: pd.DataFrame):
             "queue_density_avg": 0.0,
             "red_light_violations": 0,
             "rash_driving": 0,
+            "no_helmet_violations": 0,
+            "mobile_usage_violations": 0,
+            "triple_riding_violations": 0,
+            "heavy_load_violations": 0,
             "total_vehicles": 0,
         }
 
@@ -227,19 +339,31 @@ def _build_final_metrics(df: pd.DataFrame):
 
     violation_events = _explode_violation_types(df)
     if violation_events.empty:
-        violation_breakdown = {"Red Light Jump": 0, "Rash Driving": 0}
+        violation_breakdown = {
+            "Red Light Jump": 0,
+            "Rash Driving": 0,
+            "No Helmet": 0,
+            "Mobile Usage While Driving": 0,
+            "Triple Riding": 0,
+            "Heavy Load": 0,
+        }
         total_violations = 0
         red_light_violations = 0
         rash_driving = 0
+        no_helmet_violations = 0
+        mobile_usage_violations = 0
+        triple_riding_violations = 0
+        heavy_load_violations = 0
     else:
         counts = violation_events.value_counts().to_dict()
         red_light_violations = int(counts.get("Red Light Jump", 0))
         rash_driving = int(counts.get("Rash Driving", 0))
-        total_violations = int(red_light_violations + rash_driving)
-        violation_breakdown = {
-            "Red Light Jump": red_light_violations,
-            "Rash Driving": rash_driving,
-        }
+        no_helmet_violations = int(counts.get("No Helmet", 0))
+        mobile_usage_violations = int(counts.get("Mobile Usage While Driving", 0))
+        triple_riding_violations = int(counts.get("Triple Riding", 0))
+        heavy_load_violations = int(counts.get("Heavy Load", 0))
+        total_violations = int(sum(int(v) for v in counts.values()))
+        violation_breakdown = {str(k): int(v) for k, v in counts.items()}
 
     return {
         "total_vehicles_detected": total_vehicles_detected,
@@ -256,6 +380,10 @@ def _build_final_metrics(df: pd.DataFrame):
         "queue_density_avg": queue_density_avg,
         "red_light_violations": red_light_violations,
         "rash_driving": rash_driving,
+        "no_helmet_violations": no_helmet_violations,
+        "mobile_usage_violations": mobile_usage_violations,
+        "triple_riding_violations": triple_riding_violations,
+        "heavy_load_violations": heavy_load_violations,
         "total_vehicles": total_vehicles_detected,
     }
 
@@ -265,6 +393,10 @@ def _severity_for_violation(vtype: str, speed: float = 0.0):
         return "High"
     if vtype == "Rash Driving":
         return "High" if speed >= 45 else "Medium"
+    if vtype in {"No Helmet", "Mobile Usage While Driving", "Triple Riding"}:
+        return "High"
+    if vtype == "Heavy Load":
+        return "Medium"
     return "Low"
 
 
@@ -309,10 +441,19 @@ def _save_clip(clip_path, frames, fps):
 
 def process_full_video(
     video_path,
+    config_path=None,
     frame_stride=3,
     resize_width=960,
     detect_imgsz=416,
     conf_threshold=0.35,
+    speed_threshold=32.0,
+    acceleration_threshold=18.0,
+    direction_change_threshold=48.0,
+    zigzag_heading_threshold=20.0,
+    triple_riding_min_persons=3,
+    heavy_load_min_persons=4,
+    association_iou_threshold=0.01,
+    association_center_margin=0.25,
 ):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = os.path.join("history", f"run_{timestamp}")
@@ -356,19 +497,23 @@ def process_full_video(
     location = "Primary Junction"
 
     tracker = MultiObjectTracker(iou_threshold=0.2, max_age=12, min_hits=1, max_center_distance=140.0)
-    queue_polygon = default_queue_polygon(out_w, out_h)
+    stop_line, lane_polygons, config_source = _load_geometry_config(config_path, out_w, out_h)
+    queue_polygon = lane_polygons[0] if lane_polygons else default_queue_polygon(out_w, out_h)
     queue_analyzer = QueueAnalyzer(queue_polygon)
 
     signal_controller = SignalController(red_frames=int(processed_fps * 5), green_frames=int(processed_fps * 5))
-    stop_line = _default_stop_line(out_w, out_h)
     violation_detector = ViolationDetector(
         stop_line=stop_line,
         signal_controller=signal_controller,
-        speed_threshold=32.0,
-        acceleration_threshold=18.0,
-        direction_change_threshold=48.0,
-        zigzag_heading_threshold=20.0,
+        speed_threshold=float(speed_threshold),
+        acceleration_threshold=float(acceleration_threshold),
+        direction_change_threshold=float(direction_change_threshold),
+        zigzag_heading_threshold=float(zigzag_heading_threshold),
         zigzag_window=6,
+        triple_riding_min_persons=int(triple_riding_min_persons),
+        heavy_load_min_persons=int(heavy_load_min_persons),
+        association_iou_threshold=float(association_iou_threshold),
+        association_center_margin=float(association_center_margin),
     )
 
     logs = []
@@ -403,10 +548,11 @@ def process_full_video(
         raw_frame = frame.copy()
         timestamp_iso = datetime.now().isoformat(timespec="seconds")
 
-        detections, counts, _ = detect_vehicles(
+        detections, counts, _, context_objects = detect_vehicles(
             frame,
             conf_threshold=float(settings["conf_threshold"]),
             imgsz=int(settings["detect_imgsz"]),
+            include_aux=True,
         )
 
         tracks, tracking_rows = tracker.update(detections=detections, frame_id=frame_number, timestamp=timestamp_iso)
@@ -416,6 +562,7 @@ def process_full_video(
             frame_id=frame_number,
             fps=processed_fps,
             timestamp=timestamp_iso,
+            context_objects=context_objects,
         )
         track_lookup = {int(t.get("track_id", -1)): t for t in tracks}
 
@@ -478,6 +625,10 @@ def process_full_video(
                     "acceleration": float(ev.get("acceleration", 0.0) or 0.0),
                     "angle_change": float(ev.get("angle_change", 0.0) or 0.0),
                     "zig_zag": bool(ev.get("zig_zag", False)),
+                    "rider_count": int(ev.get("rider_count", 0) or 0),
+                    "phone_count": int(ev.get("phone_count", 0) or 0),
+                    "no_helmet_count": int(ev.get("no_helmet_count", 0) or 0),
+                    "heavy_load_count": int(ev.get("heavy_load_count", 0) or 0),
                     "queue_density": float(queue_stats.get("queue_density", 0.0)),
                     "queue_area": float(queue_stats.get("queue_area", 0.0)),
                     "trajectory_points": len(track.get("trajectory", []) or []),
@@ -561,6 +712,7 @@ def process_full_video(
             signal_state=signal_state,
             frame_violations=frame_violations,
             queue_stats=queue_stats,
+            lane_polygons=lane_polygons,
         )
         writer.write(annotated)
         frame_buffer.append(raw_frame)
@@ -600,12 +752,25 @@ def process_full_video(
         "signal_state",
         "red_light_violations",
         "rash_driving",
+        "no_helmet_violations",
+        "mobile_usage_violations",
+        "triple_riding_violations",
+        "heavy_load_violations",
+        "total_violations",
         "violation_type",
     ]
 
     for col in expected_cols:
         if col not in df.columns:
-            if col in {"red_light_violations", "rash_driving"}:
+            if col in {
+                "red_light_violations",
+                "rash_driving",
+                "no_helmet_violations",
+                "mobile_usage_violations",
+                "triple_riding_violations",
+                "heavy_load_violations",
+                "total_violations",
+            }:
                 df[col] = 0
             else:
                 df[col] = 0
@@ -613,6 +778,11 @@ def process_full_video(
     metrics = _build_final_metrics(df)
     df["red_light_violations"] = int(metrics.get("red_light_violations", 0))
     df["rash_driving"] = int(metrics.get("rash_driving", 0))
+    df["no_helmet_violations"] = int(metrics.get("no_helmet_violations", 0))
+    df["mobile_usage_violations"] = int(metrics.get("mobile_usage_violations", 0))
+    df["triple_riding_violations"] = int(metrics.get("triple_riding_violations", 0))
+    df["heavy_load_violations"] = int(metrics.get("heavy_load_violations", 0))
+    df["total_violations"] = int(metrics.get("total_violations", 0))
 
     df = df[expected_cols]
     violations_df = _build_violations_df_from_df(df)
@@ -636,6 +806,9 @@ def process_full_video(
         "df": df,
         "metrics": metrics,
         "violations_df": violations_df,
+        "config_source": config_source,
+        "lane_count": len(lane_polygons),
+        "stop_line": [[float(stop_line[0][0]), float(stop_line[0][1])], [float(stop_line[1][0]), float(stop_line[1][1])]],
     }
 
 

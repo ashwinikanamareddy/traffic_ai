@@ -110,8 +110,13 @@ def _collect_report_data(report_type, df, sections):
         data["detailed_statistics"] = {
             "total_vehicles": int(metrics.get("total_vehicles", 0)),
             "queue_count": int(metrics.get("queue_count", 0)),
+            "total_violations": int(metrics.get("total_violations", 0)),
             "red_light_violations": int(metrics.get("red_light_violations", 0)),
             "rash_driving": int(metrics.get("rash_driving", 0)),
+            "no_helmet_violations": int(metrics.get("no_helmet_violations", 0)),
+            "mobile_usage_violations": int(metrics.get("mobile_usage_violations", 0)),
+            "triple_riding_violations": int(metrics.get("triple_riding_violations", 0)),
+            "heavy_load_violations": int(metrics.get("heavy_load_violations", 0)),
         }
 
     if "Charts and Graphs" in sections:

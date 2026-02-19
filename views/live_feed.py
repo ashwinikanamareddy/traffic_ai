@@ -36,8 +36,13 @@ def _init_state():
         "metrics": {
             "total_vehicles": 0,
             "queue_count": 0,
+            "total_violations": 0,
             "red_light_violations": 0,
             "rash_driving": 0,
+            "no_helmet_violations": 0,
+            "mobile_usage_violations": 0,
+            "triple_riding_violations": 0,
+            "heavy_load_violations": 0,
             "cars": 0,
             "bikes": 0,
             "buses": 0,
@@ -141,8 +146,13 @@ def _append_live_row(camera_id: str, counts: dict, queue_count: int, events: lis
         "total_vehicles": row["total_vehicles"],
         "queue_count": row["queue_count"],
         "queue_density_avg": row["queue_density"],
+        "total_violations": _to_int(row["red_light_violations"], 0) + _to_int(row["rash_driving"], 0),
         "red_light_violations": row["red_light_violations"],
         "rash_driving": row["rash_driving"],
+        "no_helmet_violations": 0,
+        "mobile_usage_violations": 0,
+        "triple_riding_violations": 0,
+        "heavy_load_violations": 0,
     }
 
 
@@ -318,6 +328,7 @@ def show():
             "vehicle_ids": st.checkbox("Vehicle IDs", value=True, key="live_ids"),
             "queue_zones": st.checkbox("Queue Zones", value=True, key="live_queue_zones"),
             "violation_alerts": st.checkbox("Violation Alerts", value=True, key="live_violations"),
+            "highlight_violation_red": st.checkbox("Red Violation Highlight", value=True, key="live_violation_red"),
             "queue_threshold": st.session_state.live_queue_threshold,
             "violation_vehicle_threshold": st.session_state.live_violation_threshold,
             "conf_threshold": 0.35,

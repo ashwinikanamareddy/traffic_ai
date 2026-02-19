@@ -70,13 +70,44 @@ def _build_dataframe(violations):
 
 def _counts_by_type(df: pd.DataFrame):
     if df is None or df.empty or "type" not in df.columns:
-        return {"Red Light Jump": 0, "Rash Driving": 0, "Wrong Lane": 0, "Other": 0}
+        return {
+            "Red Light Jump": 0,
+            "Rash Driving": 0,
+            "No Helmet": 0,
+            "Mobile Usage While Driving": 0,
+            "Triple Riding": 0,
+            "Heavy Load": 0,
+            "Wrong Lane": 0,
+            "Other": 0,
+        }
     series = df["type"].fillna("").astype(str).str.strip()
     red = int((series == "Red Light Jump").sum())
     rash = int((series == "Rash Driving").sum())
+    helmet = int((series == "No Helmet").sum())
+    mobile = int((series == "Mobile Usage While Driving").sum())
+    triple = int((series == "Triple Riding").sum())
+    heavy = int((series == "Heavy Load").sum())
     wrong = int((series == "Wrong Lane").sum())
-    other = int(((series != "Red Light Jump") & (series != "Rash Driving") & (series != "Wrong Lane") & (series != "")).sum())
-    return {"Red Light Jump": red, "Rash Driving": rash, "Wrong Lane": wrong, "Other": other}
+    known = {
+        "Red Light Jump",
+        "Rash Driving",
+        "No Helmet",
+        "Mobile Usage While Driving",
+        "Triple Riding",
+        "Heavy Load",
+        "Wrong Lane",
+    }
+    other = int((~series.isin(known) & (series != "")).sum())
+    return {
+        "Red Light Jump": red,
+        "Rash Driving": rash,
+        "No Helmet": helmet,
+        "Mobile Usage While Driving": mobile,
+        "Triple Riding": triple,
+        "Heavy Load": heavy,
+        "Wrong Lane": wrong,
+        "Other": other,
+    }
 
 
 def _parse_hour(value):
@@ -383,7 +414,17 @@ def show():
     with head_left:
         st.markdown("<div class='section-head'><h3>Violation Records</h3></div>", unsafe_allow_html=True)
     with head_right:
-        filter_options = ["All Types", "Red Light Jump", "Rash Driving", "Wrong Lane", "Other"]
+        filter_options = [
+            "All Types",
+            "Red Light Jump",
+            "Rash Driving",
+            "No Helmet",
+            "Mobile Usage While Driving",
+            "Triple Riding",
+            "Heavy Load",
+            "Wrong Lane",
+            "Other",
+        ]
         st.markdown("<div class='select-wrap'>", unsafe_allow_html=True)
         selected_filter = st.selectbox("All Types", filter_options, index=0, label_visibility="collapsed")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -400,7 +441,19 @@ def show():
     filtered_df = df.copy()
     if selected_filter != "All Types" and "type" in filtered_df.columns:
         if selected_filter == "Other":
-            filtered_df = filtered_df[~filtered_df["type"].isin(["Red Light Jump", "Rash Driving", "Wrong Lane"])]
+            filtered_df = filtered_df[
+                ~filtered_df["type"].isin(
+                    [
+                        "Red Light Jump",
+                        "Rash Driving",
+                        "No Helmet",
+                        "Mobile Usage While Driving",
+                        "Triple Riding",
+                        "Heavy Load",
+                        "Wrong Lane",
+                    ]
+                )
+            ]
         else:
             filtered_df = filtered_df[filtered_df["type"] == selected_filter]
 
@@ -486,7 +539,11 @@ def show():
             dist_items = [
                 ("Red Light Jump", counts.get("Red Light Jump", 0), "#ef4444"),
                 ("Rash Driving", counts.get("Rash Driving", 0), "#f97316"),
-                ("Wrong Lane", counts.get("Wrong Lane", 0), "#f59e0b"),
+                ("No Helmet", counts.get("No Helmet", 0), "#f59e0b"),
+                ("Mobile Usage", counts.get("Mobile Usage While Driving", 0), "#ec4899"),
+                ("Triple Riding", counts.get("Triple Riding", 0), "#06b6d4"),
+                ("Heavy Load", counts.get("Heavy Load", 0), "#8b5cf6"),
+                ("Wrong Lane", counts.get("Wrong Lane", 0), "#22c55e"),
                 ("Other Violations", counts.get("Other", 0), "#6366f1"),
             ]
             for label, count, color in dist_items:

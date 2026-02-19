@@ -21,8 +21,13 @@ if "metrics" not in st.session_state:
     st.session_state.metrics = {
         "total_vehicles": 0,
         "queue_count": 0,
+        "total_violations": 0,
         "red_light_violations": 0,
         "rash_driving": 0,
+        "no_helmet_violations": 0,
+        "mobile_usage_violations": 0,
+        "triple_riding_violations": 0,
+        "heavy_load_violations": 0,
         "autos": 0,
     }
 if "page" not in st.session_state:
@@ -264,6 +269,7 @@ with st.sidebar:
 
     menu_items = [
         ("Dashboard Overview", "Dashboard", ""),
+        ("Manual Config + Analysis", "ManualDashboard", ""),
         ("Live Video Feed", "LiveFeed", ""),
         ("Queue Analytics", "Queue", ""),
         ("Violation Detection", "Violations", ""),
@@ -289,6 +295,7 @@ page = st.session_state.get("page", "Dashboard")
 
 page_to_module = {
     "Dashboard": "views.dashboard",
+    "ManualDashboard": "views.manual_dashboard",
     "Upload": "views.live_feed",
     "LiveFeed": "views.live_feed",
     "Queue": "views.queue",

@@ -15,8 +15,13 @@ def show():
         st.session_state.metrics = {
             "total_vehicles": 0,
             "queue_count": 0,
+            "total_violations": 0,
             "red_light_violations": 0,
             "rash_driving": 0,
+            "no_helmet_violations": 0,
+            "mobile_usage_violations": 0,
+            "triple_riding_violations": 0,
+            "heavy_load_violations": 0,
         }
 
     st.title("Upload & Process Traffic Video")
@@ -36,8 +41,13 @@ def show():
         st.session_state.metrics = {
             "total_vehicles": 0,
             "queue_count": 0,
+            "total_violations": 0,
             "red_light_violations": 0,
             "rash_driving": 0,
+            "no_helmet_violations": 0,
+            "mobile_usage_violations": 0,
+            "triple_riding_violations": 0,
+            "heavy_load_violations": 0,
         }
         st.success("System reset successfully.")
 
@@ -65,16 +75,26 @@ def show():
             st.session_state.metrics = {
                 "total_vehicles": 0,
                 "queue_count": 0,
+                "total_violations": 0,
                 "red_light_violations": 0,
                 "rash_driving": 0,
+                "no_helmet_violations": 0,
+                "mobile_usage_violations": 0,
+                "triple_riding_violations": 0,
+                "heavy_load_violations": 0,
             }
         else:
             last_row = df.iloc[-1]
             st.session_state.metrics = {
                 "total_vehicles": int(last_row.get("total_vehicles", 0)),
                 "queue_count": int(last_row.get("queue_count", 0)),
+                "total_violations": int(last_row.get("total_violations", 0)),
                 "red_light_violations": int(last_row.get("red_light_violations", 0)),
                 "rash_driving": int(last_row.get("rash_driving", 0)),
+                "no_helmet_violations": int(last_row.get("no_helmet_violations", 0)),
+                "mobile_usage_violations": int(last_row.get("mobile_usage_violations", 0)),
+                "triple_riding_violations": int(last_row.get("triple_riding_violations", 0)),
+                "heavy_load_violations": int(last_row.get("heavy_load_violations", 0)),
             }
 
         st.session_state.processed = True
