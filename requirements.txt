@@ -1,7 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 streamlit
 streamlit-drawable-canvas
-ultralytics
 opencv-python-headless
 numpy
 pandas
@@ -14,3 +13,4 @@ pydeck
 pyarrow
 torch
 torchvision
+ultralytics
