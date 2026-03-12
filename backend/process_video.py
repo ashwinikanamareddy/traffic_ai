@@ -11,6 +11,7 @@ from backend.queue_analysis import QueueAnalyzer, default_queue_polygon
 from backend.tracking import MultiObjectTracker
 from backend.violations import SignalController, ViolationDetector
 from backend.visualization import annotate_frame
+from backend.traffic_brain import get_traffic_brain
 
 
 def _draw_overlays(frame, detections, settings, queue_zone_y, events):
@@ -548,11 +549,23 @@ def process_full_video(
         raw_frame = frame.copy()
         timestamp_iso = datetime.now().isoformat(timespec="seconds")
 
-        detections, counts, _, context_objects = detect_vehicles(
+        detections, counts, _, context_objects, emergency_vehicles = detect_vehicles(
             frame,
             conf_threshold=float(settings["conf_threshold"]),
             imgsz=int(settings["detect_imgsz"]),
             include_aux=True,
+        )
+
+        # Feed data to traffic brain
+        brain = get_traffic_brain()
+        brain.tick(
+            detection_results={
+                "vehicle_counts": counts,
+                "total_vehicles": int(sum(counts.values())),
+                "emergency_vehicles": emergency_vehicles,
+                "queue_count": 0,
+            },
+            elapsed_seconds=1.0 / max(1.0, processed_fps),
         )
 
         tracks, tracking_rows = tracker.update(detections=detections, frame_id=frame_number, timestamp=timestamp_iso)
@@ -713,6 +726,8 @@ def process_full_video(
             frame_violations=frame_violations,
             queue_stats=queue_stats,
             lane_polygons=lane_polygons,
+            emergency_vehicles=emergency_vehicles,
+            corridor_active=brain.corridor_engine.is_corridor_active(),
         )
         writer.write(annotated)
         frame_buffer.append(raw_frame)

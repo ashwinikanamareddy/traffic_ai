@@ -17,6 +17,8 @@ def annotate_frame(
     frame_violations: List[Dict],
     queue_stats: Dict,
     lane_polygons: Optional[List[List[Tuple[float, float]]]] = None,
+    emergency_vehicles: Optional[List[Dict]] = None,
+    corridor_active: bool = False,
 ):
     canvas = frame.copy()
 
@@ -114,4 +116,34 @@ def annotate_frame(
         cv2.LINE_AA,
     )
 
+    # Emergency vehicle overlays
+    if emergency_vehicles:
+        for ev in emergency_vehicles:
+            ex, ey, ew, eh = ev.get("bbox", (0, 0, 0, 0))
+            ev_type = ev.get("type", "emergency").upper()
+            # Bright red-blue gradient effect
+            cv2.rectangle(canvas, (ex, ey), (ex + ew, ey + eh), (0, 0, 255), 4)
+            cv2.rectangle(canvas, (ex + 2, ey + 2), (ex + ew - 2, ey + eh - 2), (255, 50, 50), 2)
+            # Label background
+            label = f"EMERGENCY: {ev_type}"
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            cv2.rectangle(canvas, (ex, max(0, ey - th - 12)), (ex + tw + 8, ey), (0, 0, 200), -1)
+            cv2.putText(
+                canvas, label,
+                (ex + 4, max(th + 4, ey - 4)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA,
+            )
+
+    # Green corridor status
+    if corridor_active:
+        h_frame, w_frame = canvas.shape[:2]
+        cv2.rectangle(canvas, (0, h_frame - 40), (w_frame, h_frame), (0, 180, 0), -1)
+        cv2.putText(
+            canvas,
+            "GREEN CORRIDOR ACTIVE — Emergency Vehicle Priority",
+            (14, h_frame - 12),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, cv2.LINE_AA,
+        )
+
     return canvas
+

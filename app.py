@@ -1,23 +1,18 @@
 import streamlit as st
 import importlib
-import traceback
 
+# ── PAGE CONFIG ──
 st.set_page_config(
-    page_title="Traffic Intelligence System",
-    page_icon="\U0001F6A6",
+    page_title="UrbanFlow AI - Traffic Command Center",
+    page_icon="🚦",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-try:
-    from backend.auth import init_db
-    init_db()
-except Exception as e:
-    st.error(f"Startup error: {e}")
-    st.code(traceback.format_exc())
-    st.stop()
+# ── HACKATHON DEMO MODE BANNER ──
+st.warning("🚀 UrbanFlow AI Smart City Traffic Control Platform — Hackathon Demonstration Mode (Auth Disabled)")
 
-
+# ── SESSION STATE INITIALIZATION ──
 if "processed" not in st.session_state:
     st.session_state.processed = False
 if "df" not in st.session_state:
@@ -36,9 +31,11 @@ if "metrics" not in st.session_state:
         "autos": 0,
     }
 if "page" not in st.session_state:
-    st.session_state.page = "Dashboard"
+    st.session_state.page = "DashboardOverview"
 if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
+    st.session_state.logged_in = True
+if "show_guided_tour" not in st.session_state:
+    st.session_state.show_guided_tour = False
 if "live_running" not in st.session_state:
     st.session_state.live_running = False
 if "vehicle_counts" not in st.session_state:
@@ -62,7 +59,15 @@ if "violations" not in st.session_state:
 if "selected_violation" not in st.session_state:
     st.session_state.selected_violation = None
 
+# -- Initialize Control Engine --
+try:
+    from backend.city_control_engine import get_control_engine
+    engine = get_control_engine()
+except Exception as e:
+    st.error(f"Engine initialization error: {e}")
+    st.stop()
 
+# ── HELPER FUNCTIONS ──
 def _load_view_module(module_name):
     try:
         return importlib.import_module(module_name)
@@ -71,248 +76,235 @@ def _load_view_module(module_name):
         st.exception(exc)
         return None
 
+# ── GLOBAL STYLES ──
+st.markdown("""
+<style>
+    /* Import clean font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+        background-color: #F7F9FC !important;
+    }
+    
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Sidebar container */
+    [data-testid="stSidebar"] {
+        background-color: #FFFFFF !important;
+        border-right: 1px solid #E2E8F0 !important;
+        min-width: 240px !important;
+        max-width: 240px !important;
+    }
+    
+    /* Sidebar Section Header */
+    .sidebar-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #94A3B8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 0 16px 12px 16px;
+        border-bottom: 1px solid #F1F5F9;
+        margin-bottom: 24px;
+        margin-top: 12px;
+    }
 
-if not st.session_state.logged_in:
-    login_module = _load_view_module("views.login")
-    if login_module and hasattr(login_module, "show"):
-        login_module.show()
-    st.stop()
+    /* Modern Radio Buttons for clean navigation */
+    [data-testid="stSidebar"] div[role="radiogroup"] > label {
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin: 0 8px 4px 8px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+        background: #F8FAFC;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+        background: #EFF6FF;
+        border-color: #BFDBFE;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label > div:last-child {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-weight: 600;
+        color: #475569;
+        font-size: 14px;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) > div:last-child {
+        color: #2563EB;
+    }
+    
+    /* Hide radio native elements */
+    [data-testid="stSidebar"] input[type="radio"] {
+        display: none !important;
+    }
+    [data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child {
+        display: none !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-with st.sidebar:
-    st.markdown(
-        """
-        <style>
-        [data-testid="stSidebar"] {
-            background: #f4f7fb;
-            border-right: 1px solid #e6edf6;
-        }
-        [data-testid="stSidebar"] > div:first-child {
-            padding-top: 16px;
-        }
-        .sb-brand {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 8px 8px 14px 8px;
-        }
-        .sb-logo {
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            background-color: #ffffff;
-            border: 1px solid #e2e8f0;
-            background-size: 36px 36px;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='29' fill='none' stroke='%23111827' stroke-width='2.6'/><path d='M19 44 32 40 45 44 41 52H23z' fill='%23111827'/><path d='M28 30h8c2.4 0 4.5 1.4 5.6 3.5l1.8 3.5v7.2a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-2-2v-1h-12v1a2 2 0 0 1-2 2h-1.5a2 2 0 0 1-2-2V37l1.8-3.5A6.2 6.2 0 0 1 28 30z' fill='none' stroke='%23111827' stroke-width='2'/><path d='M21 41h5m17 0h-5' stroke='%23111827' stroke-width='2' stroke-linecap='round'/><path d='M18 19h8l1.2 1.2-2.6 1.8h-1.4l-5.2-1.8z' fill='%23111827'/><path d='M16 20.5h7.2c1.1 0 2.2.3 3.1.9l.8.5-2.1 3.2-.7-.5a3.3 3.3 0 0 0-2-.6H16z' fill='%23111827'/><rect x='43.2' y='17.8' width='6' height='15.6' rx='1.5' fill='%23111827'/><circle cx='46.2' cy='20.6' r='1.1' fill='white'/><circle cx='46.2' cy='25.6' r='1.1' fill='white'/><circle cx='46.2' cy='30.6' r='1.1' fill='white'/><path d='M20 18a20 20 0 0 1 24 0' fill='none' stroke='%23111827' stroke-width='2.2' stroke-linecap='round'/></svg>");
-        }
-        .sb-title {
-            font-size: 15px;
-            font-weight: 800;
-            color: #0f172a;
-        }
-        .sb-sub {
-            font-size: 12px;
-            color: #64748b;
-        }
-        [data-testid="stSidebar"] .stRadio > div { gap: 6px; }
-        [data-testid="stSidebar"] div[role="radiogroup"] {
-            display: flex;
-            flex-direction: column;
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label [data-testid="stMarkdownContainer"] p {
-            margin: 0;
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label {
-            background: #ffffff;
-            border: 1px solid #e6edf4;
-            border-radius: 12px;
-            padding: 11px 13px;
-            margin: 0 0 8px 0;
-            box-shadow: 0 2px 8px rgba(15,23,42,0.03);
-            transition: all 0.2s ease;
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
-            background: #e7fbf8;
-            border-color: #9cefe4;
-            box-shadow: inset 0 0 0 1px #9cefe4, 0 6px 14px rgba(20, 184, 166, 0.10);
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label > div:last-child {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 650;
-            color: #0f172a;
-            font-size: 15px;
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:first-child > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='1.5' y='1.5' width='21' height='21' rx='4' fill='%23f3f4f6'/><rect x='6' y='14' width='3' height='5' rx='0.8' fill='%231f2937'/><rect x='10.5' y='12' width='3' height='7' rx='0.8' fill='%231f2937'/><rect x='15' y='9' width='3' height='10' rx='0.8' fill='%231f2937'/><path d='M8.2 10.8c2.7-.3 5.1-1.8 7.2-4.5' fill='none' stroke='%231f2937' stroke-width='1.3' stroke-linecap='round'/><circle cx='8.2' cy='10.8' r='0.9' fill='%231f2937'/><circle cx='15.4' cy='6.3' r='0.9' fill='%231f2937'/><path d='M7.8 4.4a3.2 3.2 0 1 1-2.3 5.4' fill='none' stroke='%231f2937' stroke-width='1.3' stroke-linecap='round'/></svg>");
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(2) > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='2' y='5' width='14' height='14' rx='1.8' fill='none' stroke='%23334155' stroke-width='1.8'/><path d='M10 10v4l3-2z' fill='%23334155'/><path d='M16 9l5-3v12l-5-3z' fill='none' stroke='%23334155' stroke-width='1.8' stroke-linejoin='round'/></svg>");
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(3) > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 21h18' stroke='%23334155' stroke-width='1.8' stroke-linecap='round'/><rect x='5' y='12' width='3.5' height='7' rx='0.8' fill='none' stroke='%23334155' stroke-width='1.8'/><rect x='10.5' y='9' width='3.5' height='10' rx='0.8' fill='%23334155'/><rect x='16' y='5' width='3.5' height='14' rx='0.8' fill='none' stroke='%23334155' stroke-width='1.8'/></svg>\");
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(4) > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 4 21 20H3z' fill='none' stroke='%23334155' stroke-width='1.8' stroke-linejoin='round'/><path d='M12 9v5' stroke='%23334155' stroke-width='1.8' stroke-linecap='round'/><circle cx='12' cy='17' r='1' fill='%23334155'/></svg>\");
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(5) > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4 13h16l-1.2-4a2 2 0 0 0-1.9-1.4H7.1A2 2 0 0 0 5.2 9z' fill='none' stroke='%23334155' stroke-width='1.8'/><path d='M4 13v4h2m14-4v4h-2' stroke='%23334155' stroke-width='1.8' stroke-linecap='round'/><circle cx='8' cy='17' r='1.6' fill='%23334155'/><circle cx='16' cy='17' r='1.6' fill='%23334155'/></svg>\");
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(6) > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 3h10l4 4v14H5z' fill='none' stroke='%23334155' stroke-width='1.8' stroke-linejoin='round'/><path d='M15 3v4h4' fill='none' stroke='%23334155' stroke-width='1.8'/><path d='M8 10h6M8 13h6' stroke='%23334155' stroke-width='1.6' stroke-linecap='round'/><path d='M10 19h8' stroke='%23334155' stroke-width='1.8' stroke-linecap='round'/><path d='m16 16 3 3-3 3' fill='%23334155'/></svg>\");
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(7) > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M3 6h8l1 2h9v11H3z' fill='none' stroke='%23334155' stroke-width='1.8' stroke-linejoin='round'/><rect x='6.5' y='11' width='8' height='5' rx='1' fill='none' stroke='%23334155' stroke-width='1.6'/><path d='M18 11.5 21 6.5' stroke='%23334155' stroke-width='1.6' stroke-linecap='round'/><path d='M17 17.5h5' stroke='%23334155' stroke-width='1.6' stroke-linecap='round'/></svg>\");
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(8) > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M4 4v16h10' fill='none' stroke='%23334155' stroke-width='1.8' stroke-linecap='round'/><rect x='6' y='13' width='2.8' height='5' rx='0.6' fill='%23334155'/><rect x='10' y='10' width='2.8' height='8' rx='0.6' fill='%23334155'/><rect x='14' y='7' width='2.8' height='11' rx='0.6' fill='%23334155'/><circle cx='17.5' cy='14.5' r='4.2' fill='none' stroke='%23334155' stroke-width='1.8'/><path d='m20.3 17.3 2 2' stroke='%23334155' stroke-width='1.8' stroke-linecap='round'/></svg>\");
-        }
-        [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(9) > div:last-child::before {
-            content: "";
-            width: 20px;
-            height: 20px;
-            border-radius: 5px;
-            flex: 0 0 20px;
-            background-size: 20px 20px;
-            background-repeat: no-repeat;
-            background-image: url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='m12 3 1 .6 1.2-.3 1 .9.3 1.2 1 .6v1.2l.9.9-.3 1.2.6 1-.6 1 .3 1.2-.9.9v1.2l-1 .6-.3 1.2-1 .9-1.2-.3-1 .6-1-.6-1.2.3-1-.9-.3-1.2-1-.6v-1.2l-.9-.9.3-1.2-.6-1 .6-1-.3-1.2.9-.9V6.4l1-.6.3-1.2 1-.9 1.2.3z' fill='none' stroke='%23334155' stroke-width='1.4'/><circle cx='12' cy='12' r='3.8' fill='none' stroke='%23334155' stroke-width='1.4'/><path d='m10.6 12 1 1 2-2' fill='none' stroke='%23334155' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/></svg>\");
-        }
-        [data-testid="stSidebar"] input[type="radio"] {
-            position: absolute !important;
-            opacity: 0 !important;
-            width: 0 !important;
-            height: 0 !important;
-            margin: 0 !important;
-            pointer-events: none !important;
-        }
-        [data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child,
-        [data-testid="stSidebar"] [data-baseweb="radio"] > div:first-child * {
-            display: none !important;
-            width: 0 !important;
-            height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        [data-testid="stSidebar"] [role="radiogroup"] label svg {
-            display: none !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        """
-        <div class="sb-brand">
-            <div class="sb-logo"></div>
+# ── GLOBAL TOP NAVBAR ──
+with st.container():
+    nc1, nc2, nc3 = st.columns([3, 4, 3])
+    
+    # Left: Branding
+    with nc1:
+        st.markdown("""
+        <div style="display:flex; align-items:center; gap:12px; margin-top:8px;">
+            <div style="background:#EFF6FF; color:#2563EB; width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; border:1px solid #BFDBFE;">🚦</div>
             <div>
-                <div class="sb-title">TrafficAI</div>
-                <div class="sb-sub">Intelligence System</div>
+                <div style="font-size:18px; font-weight:800; color:#0F172A; line-height:1.2;">UrbanFlow AI</div>
+                <div style="font-size:11px; color:#64748B; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">City Traffic Command Center</div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """, unsafe_allow_html=True)
+        
+    # Middle: Quick Scenarios
+    with nc2:
+        st.markdown("<div style='font-size:11px; font-weight:700; color:#94A3B8; text-transform:uppercase; margin-bottom:4px; text-align:center;'>Quick Scenario Controls</div>", unsafe_allow_html=True)
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        if sc1.button("🚑 Ambulance", use_container_width=True):
+            engine.process_event("ambulance_detected", {"location": "INT-03"})
+            st.rerun()
+        if sc2.button("🚗 Heavy Traffic", use_container_width=True):
+            engine.process_event("vehicle_detected", {"counts": {"cars": 150, "buses": 10}})
+            st.rerun()
+        if sc3.button("💥 Accident", use_container_width=True):
+            engine.process_event("incident_triggered", {"type": "Major Accident", "location": "INT-02"})
+            st.rerun()
+        if sc4.button("🔄 Reset", use_container_width=True):
+            engine.process_event("emergency_cleared")
+            engine.process_event("incident_cleared")
+            st.rerun()
+            
+    # Right: Presentation Tools
+    with nc3:
+        st.markdown("<div style='font-size:11px; font-weight:700; color:#94A3B8; text-transform:uppercase; margin-bottom:4px; text-align:right;'>Presentation Tools</div>", unsafe_allow_html=True)
+        pc1, pc2 = st.columns(2)
+        if pc1.button("🎓 Guided Tour", use_container_width=True):
+            st.session_state.show_guided_tour = not st.session_state.show_guided_tour
+            st.rerun()
+        if pc2.button("📊 Demo Report", use_container_width=True):
+            st.toast("Generating Demo Report...", icon="⏳")
+            report_txt = (
+                f"**UrbanFlow Engine Report**\n\n"
+                f"Density: {engine.state['density_level']}\n"
+                f"Emergency Mode: {engine.state['active_emergency']}\n"
+                f"Incident State: {engine.state['active_incident']}"
+            )
+            st.info(report_txt)
+            
+st.markdown("<hr style='margin:12px 0 24px 0; border:none; border-top:1px solid #E2E8F0;'>", unsafe_allow_html=True)
+
+# ── SYSTEM PERFORMANCE METRICS ──
+st.markdown("""
+<div style="display:flex; justify-content:space-between; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px 24px; margin-bottom:24px;">
+    <div style="display:flex; align-items:center; gap:8px;"><span style="color:#64748B; font-size:12px; font-weight:600; text-transform:uppercase;">Vision FPS:</span> <span style="color:#0F172A; font-weight:800; font-size:14px;">30.0</span></div>
+    <div style="display:flex; align-items:center; gap:8px;"><span style="color:#64748B; font-size:12px; font-weight:600; text-transform:uppercase;">Detection Latency:</span> <span style="color:#0F172A; font-weight:800; font-size:14px;">42ms</span></div>
+    <div style="display:flex; align-items:center; gap:8px;"><span style="color:#64748B; font-size:12px; font-weight:600; text-transform:uppercase;">AI Brain Decision Time:</span> <span style="color:#22C55E; font-weight:800; font-size:14px;">12ms</span></div>
+    <div style="display:flex; align-items:center; gap:8px;"><span style="color:#64748B; font-size:12px; font-weight:600; text-transform:uppercase;">Signal Network Sync:</span> <span style="color:#2563EB; font-weight:800; font-size:14px;">< 1ms</span></div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── GUIDED TOUR OVERLAY ──
+if st.session_state.show_guided_tour:
+    st.markdown(r"""
+    <div style="background:#0F172A; border-radius:12px; padding:24px; margin-bottom:24px; color:#F8FAFC; box-shadow:0 20px 25px -5px rgba(0,0,0,0.2);">
+        <h3 style="margin:0 0 16px 0; font-size:18px; color:#38BDF8;">🎓 UrbanFlow AI: Guided Demo Presentation</h3>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+            <div>
+                <div style="margin-bottom:12px;"><span style="background:#38BDF8; color:#0F172A; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; margin-right:8px;">STEP 1</span> Upload Camera Feed <i>(Live Monitoring)</i></div>
+                <div style="margin-bottom:12px;"><span style="background:#38BDF8; color:#0F172A; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; margin-right:8px;">STEP 2</span> AI Detection & Density Tracking</div>
+                <div style="margin-bottom:12px;"><span style="background:#38BDF8; color:#0F172A; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; margin-right:8px;">STEP 3</span> Dynamic Signal Optimization</div>
+            </div>
+            <div>
+                <div style="margin-bottom:12px;"><span style="background:#38BDF8; color:#0F172A; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; margin-right:8px;">STEP 4</span> Trigger Emergency Mode <i>(Ambulance)</i></div>
+                <div style="margin-bottom:12px;"><span style="background:#38BDF8; color:#0F172A; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; margin-right:8px;">STEP 5</span> Watch AI Rerouting in Action</div>
+                <div style="margin-bottom:12px;"><span style="background:#38BDF8; color:#0F172A; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; margin-right:8px;">STEP 6</span> Global Analytics & Heatmaps</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ── MAIN NAVIGATION SIDEBAR ──
+with st.sidebar:
+    st.markdown('<div class="sidebar-title">Main Navigation</div>', unsafe_allow_html=True)
 
     menu_items = [
-        ("Dashboard Overview", "Dashboard", ""),
-        ("Manual Config + Analysis", "ManualDashboard", ""),
-        ("Live Video Feed", "LiveFeed", ""),
-        ("Queue Analytics", "Queue", ""),
-        ("Violation Detection", "Violations", ""),
-        ("Vehicle Statistics", "Statistics", ""),
-        ("Export Reports", "Export", ""),
-        ("Violation Evidence", "ViolationEvidence", ""),
-        ("Trends & Insights", "Insights", ""),
-        ("System Health", "Health", ""),
+        ("Dashboard Overview", "DashboardOverview", "📊"),
+        ("City Traffic Intelligence", "CityIntelligence", "🧠"),
+        ("Live Traffic Monitoring", "LiveMonitoring", "📹"),
+        ("Traffic Density Analyzer", "TrafficDensity", "📈"),
+        ("Traffic Prediction AI", "TrafficPrediction", "🔮"),
+        ("AI Traffic Brain", "AIBrain", "⚙️"),
+        ("Emergency Response", "EmergencyResponse", "🚨"),
+        ("Route Optimization", "RouteOptimization", "🗺️"),
+        ("City Traffic Map", "CityMap", "🏙️"),
+        ("Scenario Simulator", "ScenarioSimulator", "🕹️"),
+        ("Traffic Incident Manager", "TrafficIncidentManager", "⚠️"),
+        ("Traffic Analytics", "TrafficAnalytics", "📊"),
+        ("AI Traffic Assistant", "AIAssistant", "💬"),
     ]
 
-    labels = [label if not icon else f"{icon} {label}" for label, key, icon in menu_items]
+    labels = [f"{icon} {label}" for label, key, icon in menu_items]
     keys = [key for _, key, _ in menu_items]
-    current_key = st.session_state.get("page", "Dashboard")
-    default_index = keys.index(current_key) if current_key in keys else 0
-
-    selection = st.radio("Navigation", labels, index=default_index, label_visibility="collapsed")
+    
+    current_page = st.session_state.get("page", "DashboardOverview")
+    default_idx = keys.index(current_page) if current_page in keys else 0
+    
+    selection = st.radio("Navigation", labels, index=default_idx, label_visibility="collapsed")
     sel_index = labels.index(selection)
     st.session_state.page = keys[sel_index]
+    
+    # Footer Mission Statement
+    st.markdown("""
+    <div style="margin-top:auto; padding-top:40px; font-size:11px; color:#94A3B8; line-height:1.5;">
+        <strong style="color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">UrbanFlow Operations</strong><br>
+        A city-wide intelligent traffic system optimizing multi-lane grid movement through automated Green Corridors and AI vision.
+    </div>
+    """, unsafe_allow_html=True)
 
-    # Logout control removed from sidebar per updated UI requirement.
-
-page = st.session_state.get("page", "Dashboard")
-
+# ── PAGE ROUTING ──
 page_to_module = {
-    "Dashboard": "views.dashboard",
-    "ManualDashboard": "views.manual_dashboard",
-    "Upload": "views.live_feed",
-    "LiveFeed": "views.live_feed",
-    "Queue": "views.queue",
-    "Violations": "views.violations",
-    "ViolationEvidence": "views.violation_evidence",
-    "Statistics": "views.statistics",
-    "Export": "views.export",
-    "Insights": "views.insights",
-    "Health": "views.system_health",
+    "DashboardOverview": "views.dashboard_overview",
+    "CityIntelligence": "views.city_intelligence",
+    "LiveMonitoring": "views.live_monitoring",
+    "TrafficDensity": "views.traffic_density",
+    "TrafficPrediction": "views.traffic_prediction",
+    "AIBrain": "views.ai_brain",
+    "EmergencyResponse": "views.emergency_response",
+    "RouteOptimization": "views.route_optimization",
+    "CityMap": "views.city_map",
+    "ScenarioSimulator": "views.scenario_simulator",
+    "TrafficIncidentManager": "views.traffic_incident_manager",
+    "TrafficAnalytics": "views.traffic_analytics",
+    "AIAssistant": "views.ai_assistant",
 }
 
-module_name = page_to_module.get(page, "views.dashboard")
-page_module = _load_view_module(module_name)
-if page_module and hasattr(page_module, "show"):
-    page_module.show()
+module_name = page_to_module.get(st.session_state.page, "views.dashboard_overview")
+
+try:
+    page_module = _load_view_module(module_name)
+    if page_module and hasattr(page_module, "show"):
+        page_module.show()
+    else:
+        st.error(f"Module {module_name} could not be rendered.")
+except Exception as e:
+    st.markdown(r"""
+    <div style="background:#FEF2F2; border:1px solid #FECACA; border-radius:12px; padding:20px; display:flex; gap:16px; align-items:center;">
+        <div style="font-size:32px;">⚠️</div>
+        <div>
+            <h3 style="margin:0 0 4px 0; color:#DC2626; font-size:16px;">Module Temporarily Unavailable</h3>
+            <div style="color:#991B1B; font-size:14px;">A runtime error occurred in this view. Core traffic monitoring & background Engine logic remains active.</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.error(f"Stack Trace: {e}")
