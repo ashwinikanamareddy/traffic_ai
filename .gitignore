@@ -21,5 +21,17 @@ data/
 uploads/
 temp/
 logs/
+evidence/
+recordings/
+results/
+outputs/
 *.log
 trafficai_users.db
+.cache/
+**/*.mp4
+**/*.avi
+**/*.mov
+**/*.pt
+**/*.onnx
+**/*.weights
+**/__pycache__/
